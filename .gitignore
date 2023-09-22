@@ -1,0 +1,18 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments
+env/
+venv/
+transformer_traslator/
+
+# Saved files
+runs/
+tokenizers/
+weights/
+
+# OS generated files
+.DS_Store
