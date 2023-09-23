@@ -5,6 +5,13 @@ from torch.autograd import Variable
 import math
 
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
+import math
+
+
 class InputEmbedding(nn.Module):
     """
     Convert input tokens into scaled embeddings.
@@ -214,7 +221,7 @@ class EncoderBlock(nn.Module):
 
 class Encoder(nn.Module):
     """
-    Repeats encoder block N times.
+    Encoder.
     """
     def __init__(self, embed_size: int, dropout: float, heads: int, hidden_size: int, N: int) -> None:
         super().__init__()
@@ -278,7 +285,7 @@ class DecoderBlock(nn.Module):
 
 class Decoder(nn.Module):
     """
-    Repeats decoder block N times.
+    Decoder.
     """
     def __init__(self, embed_size: int, dropout: float, heads: int, hidden_size: int, N: int) -> None:
         super().__init__()
@@ -376,5 +383,3 @@ class Transformer(nn.Module):
         enc_out = self.encode(src=src, src_mask=src_mask)
         dec_out = self.decode(tgt=tgt, encoder_output=enc_out, src_mask=src_mask, tgt_mask=tgt_mask)
         return dec_out
-    
-    
