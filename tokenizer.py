@@ -19,19 +19,14 @@ def create_tokenizer(dataset, config, lang: str):
     # path to the tokenizer file
     tokenizer_path = os.path.join(config.TOKENIZER_FOLDER_NAME, f'tokenizer_{lang}.json')
     if not os.path.exists(tokenizer_path):
-        # if tokenizer file doesn't exist,
-        # we create tokenizer from scratch
+        # if tokenizer file doesn't exist, we create tokenizer from scratch
         tokenizer = Tokenizer(WordLevel(unk_token="[UNK]"))
         tokenizer.pre_tokenizer = Whitespace()
-        trainer = WordLevelTrainer(
-            special_tokens=["[UNK]", "[PAD]", "[SOS]", "[EOS]"], 
-            min_frequency=5
-        )
+        trainer = WordLevelTrainer(special_tokens=["[UNK]", "[PAD]", "[SOS]", "[EOS]"], min_frequency=5)
         tokenizer.train_from_iterator(get_all_sentences(dataset, lang), trainer=trainer)
         tokenizer.save(str(tokenizer_path))
     else:
-        # if tokenizer file exists,
-        # we load tokenizer file
+        # if tokenizer file exists, we load tokenizer file
         tokenizer = Tokenizer.from_file(str(tokenizer_path))
 
     return tokenizer

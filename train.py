@@ -130,13 +130,15 @@ def train_model(config):
                 acc_cer += cer(prd_text, tgt_text)
                 acc_wer += wer(prd_text, tgt_text)
 
-                if acc < 20:
+                if acc % 10 == 0:
                     print(f"{f'SRC: ':>12}{src_text}")
                     print(f"{f'TGT: ':>12}{tgt_text}")
                     print(f"{f'PRD: ':>12}{prd_text}")
                     print('-'*80)
-                else:
-                    # stop validation black to save time
+
+                if acc == 100:
+                    # will calculate va scores based on first 100 batches 
+                    # (in our case 1 batch = 1 sentence)
                     break
 
         writer.add_scalar('validation CER', (acc_cer / acc).item(), epoch)
