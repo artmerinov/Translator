@@ -26,16 +26,16 @@ def train_model(config):
         os.mkdir(weights_dir)
 
     # load tokenizers
-    tokenizer_src = load_tokenizer(config=config, lang=config.LANG_SRC)
-    tokenizer_tgt = load_tokenizer(config=config, lang=config.LANG_TGT)
+    src_tokenizer = load_tokenizer(config=config, lang=config.LANG_SRC)
+    tgt_tokenizer = load_tokenizer(config=config, lang=config.LANG_TGT)
 
     tr_dataloader, va_dataloader = get_dataset(config)
 
     # create the transformer
     model = Transformer(
         embed_size=config.D_MODEL,
-        src_vocab_size=tokenizer_src.get_vocab_size(),
-        tgt_vocab_size=tokenizer_tgt.get_vocab_size(),
+        src_vocab_size=src_tokenizer.get_vocab_size(),
+        tgt_vocab_size=tgt_tokenizer.get_vocab_size(),
         max_len=config.MAX_LEN,
         dropout=0.1,
         heads=8,
@@ -45,7 +45,7 @@ def train_model(config):
 
     writer = SummaryWriter(config.EXPERIMENT_FOLDER_NAME)
     optimizer = torch.optim.Adam(params=model.parameters(), lr=config.LR, eps=1e-9)
-    loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer_src.token_to_id("[PAD]"), label_smoothing=0.1).to(device)
+    loss_fn = nn.CrossEntropyLoss(ignore_index=src_tokenizer.token_to_id("[PAD]"), label_smoothing=0.1).to(device)
 
     batch_processed = 0
     for epoch in range(config.NUM_EPOCHS):
@@ -75,7 +75,7 @@ def train_model(config):
 
             # compute the loss using a simple cross entropy
             loss = loss_fn(
-                input=model_output.view(-1, tokenizer_tgt.get_vocab_size()), # (batch_size * max_len, vocab_size)
+                input=model_output.view(-1, tgt_tokenizer.get_vocab_size()), # (batch_size * max_len, vocab_size)
                 target=label.view(-1) # (batch_size * max_len)
             )
             batch_iterator.set_postfix({"loss": f"{loss.item():6.3f}"})
@@ -115,23 +115,22 @@ def train_model(config):
                 # decide on the next token
                 model_output = greedy(
                     model=model,
-                    source=encoder_input,
-                    source_mask=encoder_mask,
-                    tokenizer_src=tokenizer_src,
+                    src=encoder_input,
+                    src_mask=encoder_mask,
+                    src_tokenizer=src_tokenizer,
                     max_len=config.MAX_LEN,
                     device=device
                 )
 
                 src_text = va_batch["src_text"][0]
                 tgt_text = va_batch["tgt_text"][0]
-                prd_text = tokenizer_tgt.decode(model_output.detach().cpu().numpy())
+                prd_text = tgt_tokenizer.decode(model_output.detach().cpu().numpy())
 
                 acc_bleu += bleu([prd_text], [[tgt_text]])
                 acc_cer += cer(prd_text, tgt_text)
                 acc_wer += wer(prd_text, tgt_text)
 
                 if acc < 20:
-                    # print translation examples from validation set
                     print(f"{f'SRC: ':>12}{src_text}")
                     print(f"{f'TGT: ':>12}{tgt_text}")
                     print(f"{f'PRD: ':>12}{prd_text}")
