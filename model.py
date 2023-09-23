@@ -6,8 +6,9 @@ import math
 
 
 class InputEmbedding(nn.Module):
-    """Convert input tokens into scaled embeddings."""
-
+    """
+    Convert input tokens into scaled embeddings.
+    """
     def __init__(self, embed_size: int, vocab_size: int) -> None:
         super().__init__()
         self.vocab_size = vocab_size
@@ -21,8 +22,9 @@ class InputEmbedding(nn.Module):
 
 
 class PositionalEncoding(nn.Module):
-    """Inject information about relative or absolute positions of tokens."""
-
+    """
+    Inject information about relative or absolute positions of tokens.
+    """
     def __init__(self, embed_size: int, max_len: int, dropout: float) -> None:
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
@@ -58,8 +60,9 @@ class PositionalEncoding(nn.Module):
 
 
 class LayerNormalisation(nn.Module):
-    """Layer normalisation."""
-
+    """
+    Layer normalisation.
+    """
     def __init__(self, embed_size: int, eps: float = 1e-6) -> None:
         super().__init__()
         # prevent divition by zero
@@ -77,8 +80,9 @@ class LayerNormalisation(nn.Module):
 
 
 class FeedForwardBlock(nn.Module):
-    """Fully connected feed-forward network."""
-
+    """
+    Fully connected feed-forward network.
+    """
     def __init__(self, embed_size: int, hidden_size: int, dropout: float) -> None:
         super().__init__()
         self.fc1 = nn.Linear(embed_size, hidden_size, bias=True)
@@ -88,11 +92,26 @@ class FeedForwardBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.fc2(self.dropout(self.relu(self.fc1(x))))
+    
+
+class ProjectionLayer(nn.Module):
+    """
+    Projection layer to generate probabilities.
+    """
+    def __init__(self, embed_size: int, vocab_size: int) -> None:
+        super().__init__()
+        self.fc = nn.Linear(embed_size, vocab_size)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.fc(x)
+        x = F.log_softmax(x, dim=-1)
+        return x
 
 
 class MultiHeadAttentionBlock(nn.Module):
-    """Multi-head attention."""
-
+    """
+    Multi-head attention.
+    """
     def __init__(self, embed_size: int, heads: int, dropout: float) -> None:
         super().__init__()
         self.embed_size = embed_size  # d_model
@@ -161,54 +180,78 @@ class MultiHeadAttentionBlock(nn.Module):
         return x
 
 
-class ResidualConnection(nn.Module):
-    """Skip-connection."""
-
-    def __init__(self, embed_size: int, dropout: float) -> None:
-        super().__init__()
-        self.norm = LayerNormalisation(embed_size=embed_size)
-        self.dropout = nn.Dropout(p=dropout)
-
-    def forward(self, x: torch.Tensor, prev_layer: nn.Module) -> torch.Tensor:
-        # apply residual connection to sublayer
-        return x + self.dropout(prev_layer(self.norm(x)))
-
-
 class EncoderBlock(nn.Module):
-    """Encoder block."""
-
-    def __init__(
-        self,
-        embed_size: int,
-        self_attention_block: MultiHeadAttentionBlock,
-        feed_forward_block: FeedForwardBlock,
-        dropout: float,
-    ) -> None:
+    """
+    Encoder block.
+    """
+    def __init__(self, embed_size: int,  heads: int, hidden_size: int, dropout: float) -> None:
         super().__init__()
-        self.self_attention_block = self_attention_block
-        self.feed_forward_block = feed_forward_block
-        self.residual_connection1 = ResidualConnection(embed_size=embed_size, dropout=dropout)
-        self.residual_connection2 = ResidualConnection(embed_size=embed_size, dropout=dropout)
+        self.self_attention_block = MultiHeadAttentionBlock(
+            embed_size=embed_size,
+            heads=heads,
+            dropout=dropout
+        )
+        self.norm = LayerNormalisation(embed_size=embed_size)
+        self.feed_forward_block = FeedForwardBlock(
+            embed_size=embed_size, 
+            hidden_size=hidden_size, 
+            dropout=dropout
+        )
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, x: torch.Tensor, src_mask: torch.Tensor) -> torch.Tensor:
-        x = self.residual_connection1(
-            x=x, prev_layer=lambda x: self.self_attention_block(q=x, k=x, v=x, mask=src_mask))
-        x = self.residual_connection2(
-            x=x, prev_layer=lambda x: self.feed_forward_block(x=x))
-        x = self.dropout(x)
+        
+        x_norm1 = self.norm(x)
+        self_att = self.self_attention_block(q=x_norm1, k=x_norm1, v=x_norm1, mask=src_mask)
+        x = x + self.dropout(self_att)
+
+        x_norm2 = self.norm(x)
+        ff = self.feed_forward_block(x=x_norm2)
+        x = x + self.dropout(ff)
+        
         return x
 
 
 class Encoder(nn.Module):
-    """Encoder may consist of N encoder blocks."""
-
-    def __init__(self, embed_size: int, layers: nn.ModuleList) -> None:
+    """
+    Encoder:
+        InputEmbedding
+        PositionalEncoding
+        EncoderBlock N times
+        LayerNormalisation
+    """
+    def __init__(
+            self, 
+            embed_size: int, 
+            vocab_size: int,
+            max_len: int,
+            dropout: float,
+            heads: int,
+            hidden_size: int,
+            N: int,
+    ) -> None:
         super().__init__()
-        self.layers = layers
+        self.input_embedding = InputEmbedding(
+            embed_size=embed_size, 
+            vocab_size=vocab_size
+        )
+        self.pos_encoding = PositionalEncoding(
+            embed_size=embed_size, 
+            max_len=max_len,
+            dropout=dropout
+        )
+        self.encoder_block = EncoderBlock(
+            embed_size=embed_size,
+            heads=heads,
+            hidden_size=hidden_size,
+            dropout=dropout
+        )
         self.norm = LayerNormalisation(embed_size=embed_size)
+        self.layers = nn.ModuleList(modules=[self.encoder_block for _ in range(N)])
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        x = self.input_embedding(x=x)
+        x = self.pos_encoding(x=x)
         for layer in self.layers:
             x = layer(x=x, src_mask=mask)
         x = self.norm(x)
@@ -216,177 +259,154 @@ class Encoder(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    """Decoder block."""
-
-    def __init__(
-        self,
-        embed_size: int,
-        self_attention_block: MultiHeadAttentionBlock,
-        cross_attention_block: MultiHeadAttentionBlock,
-        feed_forward_block: FeedForwardBlock,
-        dropout: float,
-    ) -> None:
+    """
+    Decoder block.
+    """
+    def __init__(self, embed_size: int, heads: int, hidden_size: int, dropout: float) -> None:
         super().__init__()
-        self.self_attention_block = self_attention_block
-        self.cross_attention_block = cross_attention_block
-        self.feed_forward_block = feed_forward_block
-        self.residual_connection1 = ResidualConnection(embed_size=embed_size, dropout=dropout)
-        self.residual_connection2 = ResidualConnection(embed_size=embed_size, dropout=dropout)
-        self.residual_connection3 = ResidualConnection(embed_size=embed_size, dropout=dropout)
+        self.attention_block = MultiHeadAttentionBlock(
+            embed_size=embed_size,
+            heads=heads,
+            dropout=dropout
+        )
+        self.norm = LayerNormalisation(embed_size=embed_size)
+        self.feed_forward_block = FeedForwardBlock(
+            embed_size=embed_size, 
+            hidden_size=hidden_size, 
+            dropout=dropout
+        )
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, x: torch.Tensor, encoder_output: torch.Tensor, src_mask: torch.Tensor, tgt_mask: torch.Tensor) -> torch.Tensor:
-        x = self.residual_connection1(
-            x=x, prev_layer=lambda x: self.self_attention_block(q=x, k=x, v=x, mask=tgt_mask))
-        x = self.residual_connection2(
-            x=x, prev_layer=lambda x: self.cross_attention_block(q=x, k=encoder_output, v=encoder_output, mask=src_mask))
-        x = self.residual_connection3(
-            x=x, prev_layer=lambda x: self.feed_forward_block(x=x))
-        x = self.dropout(x)
+    def forward(
+            self, 
+            x: torch.Tensor, 
+            encoder_output: torch.Tensor, 
+            src_mask: torch.Tensor, 
+            tgt_mask: torch.Tensor
+    ) -> torch.Tensor:
+
+        x_norm1 = self.norm(x)
+        self_att = self.attention_block(q=x_norm1, k=x_norm1, v=x_norm1, mask=tgt_mask)
+        x = x + self.dropout(self_att)
+
+        x_norm2 = self.norm(x)
+        cross_att = self.attention_block(q=x_norm2, k=encoder_output, v=encoder_output, mask=src_mask)
+        x = x + self.dropout(cross_att)
+    
+        x_norm3 = self.norm(x)
+        ff = self.feed_forward_block(x=x_norm3)
+        x = x + self.dropout(ff)
+
         return x
 
 
 class Decoder(nn.Module):
-    """Decoder may consist of N decoder blocks."""
-
-    def __init__(self, embed_size: int, layers: nn.ModuleList) -> None:
+    """
+    Decoder:
+        InputEmbedding
+        PositionalEncoding
+        DecoderBlock N times
+        LayerNormalisation
+        ProjectionLayer
+    """
+    def __init__(
+            self, 
+            embed_size: int, 
+            vocab_size: int,
+            max_len: int,
+            dropout: float,
+            heads: int,
+            hidden_size: int,
+            N: int,
+    ) -> None:
         super().__init__()
-        self.layers = layers
+        self.input_embedding = InputEmbedding(
+            embed_size=embed_size, 
+            vocab_size=vocab_size
+        )
+        self.pos_encoding = PositionalEncoding(
+            embed_size=embed_size, 
+            max_len=max_len,
+            dropout=dropout
+        )
+        self.decoder_block = DecoderBlock(
+            embed_size=embed_size,
+            heads=heads,
+            hidden_size=hidden_size,
+            dropout=dropout
+        )
         self.norm = LayerNormalisation(embed_size=embed_size)
+        self.layers = nn.ModuleList(modules=[self.decoder_block for _ in range(N)])
+        self.proj = ProjectionLayer(embed_size=embed_size, vocab_size=vocab_size)
 
-    def forward(self, x: torch.Tensor, encoder_output: torch.Tensor, src_mask: torch.Tensor, tgt_mask: torch.Tensor) -> torch.Tensor:
+    def forward(
+            self, 
+            x: torch.Tensor, 
+            encoder_output: torch.Tensor, 
+            src_mask: torch.Tensor, 
+            tgt_mask: torch.Tensor
+    ) -> torch.Tensor:
+        x = self.input_embedding(x=x)
+        x = self.pos_encoding(x=x)
         for layer in self.layers:
             x = layer(x=x, encoder_output=encoder_output, src_mask=src_mask, tgt_mask=tgt_mask)
         x = self.norm(x)
-        return x
-
-
-class ProjectionLayer(nn.Module):
-    """Project embedding into vocabulary."""
-
-    def __init__(self, embed_size, vocab_size) -> None:
-        super().__init__()
-        self.proj = nn.Linear(embed_size, vocab_size)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # (batch, seq_len, embed_size) --> (batch, seq_len, vocab_size)
         x = self.proj(x)
         return x
 
 
 class Transformer(nn.Module):
-    """Put everything together."""
-
+    """
+    Put everything together.
+    """
     def __init__(
-        self,
-        encoder: Encoder,
-        decoder: Decoder,
-        src_embed: InputEmbedding,
-        tgt_embed: InputEmbedding,
-        src_pos: PositionalEncoding,
-        tgt_pos: PositionalEncoding,
-        projection_layer: ProjectionLayer,
+            self,
+            embed_size: int, 
+            src_vocab_size: int,
+            tgt_vocab_size: int,
+            max_len: int,
+            dropout: float,
+            heads: int,
+            hidden_size: int,
+            N: int,
     ) -> None:
         super().__init__()
-        self.encoder = encoder
-        self.decoder = decoder
-        self.src_embed = src_embed
-        self.tgt_embed = tgt_embed
-        self.src_pos = src_pos
-        self.tgt_pos = tgt_pos
-        self.projection_layer = projection_layer
+        self.encoder = Encoder(
+            embed_size=embed_size,
+            vocab_size=src_vocab_size,
+            max_len=max_len,
+            dropout=dropout,
+            heads=heads,
+            hidden_size=hidden_size,
+            N=N
+        )
+        self.decoder = Decoder(
+            embed_size=embed_size,
+            vocab_size=tgt_vocab_size,
+            max_len=max_len,
+            dropout=dropout,
+            heads=heads,
+            hidden_size=hidden_size,
+            N=N
+        )
+
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        """
+        Initiate parameters in the transformer model.
+        """
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
 
     def encode(self, src: torch.Tensor, src_mask: torch.Tensor) -> torch.Tensor:
-        # (batch_size, max_len, embed_size)
-        src = self.src_embed(src)
-        src = self.src_pos(src)
-        src = self.encoder(x=src, mask=src_mask)
-        return src
-
-    def decode(self, encoder_output: torch.Tensor, src_mask: torch.Tensor, tgt: torch.Tensor, tgt_mask: torch.Tensor) -> torch.Tensor:
-        # (batch_size, max_len, embed_size)
-        tgt = self.tgt_embed(tgt)
-        tgt = self.tgt_pos(tgt)
-        tgt = self.decoder(x=tgt, encoder_output=encoder_output, src_mask=src_mask, tgt_mask=tgt_mask)
-        return tgt
-
-    def project(self, x: torch.Tensor) -> torch.Tensor:
-        # (batch_size, max_len, embed_size) -->
-        # (batch_size, max_len, vocab_size)
-        return self.projection_layer(x)
-
-
-def build_transformer(
-    src_vocab_size: int,
-    tgt_vocab_size: int,
-    src_seq_len: int,
-    tgt_seq_len: int,
-    embed_size: int,
-    N: int = 6,
-    heads: int = 8,
-    dropout: float = 0.1,
-    hidden_size: int = 2048,
-) -> Transformer:
-    """
-    Given all parameters build a transformer.
-    """
-    # create the embedding layers
-    src_embed = InputEmbedding(embed_size=embed_size, vocab_size=src_vocab_size)
-    tgt_embed = InputEmbedding(embed_size=embed_size, vocab_size=tgt_vocab_size)
-
-    # create the positional encoding layers
-    src_pos = PositionalEncoding(embed_size=embed_size, max_len=src_seq_len, dropout=dropout)
-    tgt_pos = PositionalEncoding(embed_size=embed_size, max_len=tgt_seq_len, dropout=dropout)
-
-    # create the encoder blocks
-    encoder_blocks = nn.ModuleList()
-    for _ in range(N):
-        encoder_self_attention_block = MultiHeadAttentionBlock(embed_size=embed_size, heads=heads, dropout=dropout)
-        feed_forward_block = FeedForwardBlock(embed_size=embed_size, hidden_size=hidden_size, dropout=dropout)
-        encoder_block = EncoderBlock(
-            embed_size=embed_size, 
-            self_attention_block=encoder_self_attention_block, 
-            feed_forward_block=feed_forward_block, 
-            dropout=dropout
-        )
-        encoder_blocks.append(encoder_block)
-
-    # create the decoder blocks
-    decoder_blocks = nn.ModuleList()
-    for _ in range(N):
-        decoder_self_attention_block = MultiHeadAttentionBlock(embed_size=embed_size, heads=heads, dropout=dropout)
-        decoder_cross_attention_block = MultiHeadAttentionBlock(embed_size=embed_size, heads=heads, dropout=dropout)
-        feed_forward_block = FeedForwardBlock(embed_size=embed_size, hidden_size=hidden_size, dropout=dropout)
-        decoder_block = DecoderBlock(
-            embed_size=embed_size,
-            self_attention_block=decoder_self_attention_block,
-            cross_attention_block=decoder_cross_attention_block,
-            feed_forward_block=feed_forward_block,
-            dropout=dropout
-        )
-        decoder_blocks.append(decoder_block)
-
-    # create the encoder and decoder
-    encoder = Encoder(embed_size=embed_size, layers=encoder_blocks)
-    decoder = Decoder(embed_size=embed_size, layers=decoder_blocks)
-
-    # create the projection layer
-    projection_layer = ProjectionLayer(embed_size=embed_size, vocab_size=tgt_vocab_size)
-
-    # create the transformer
-    transformer = Transformer(
-        encoder=encoder,
-        decoder=decoder,
-        src_embed=src_embed,
-        tgt_embed=tgt_embed,
-        src_pos=src_pos,
-        tgt_pos=tgt_pos,
-        projection_layer=projection_layer,
-    )
-
-    # initialize the parameters
-    for p in transformer.parameters():
-        if p.dim() > 1:
-            nn.init.xavier_uniform_(p)
-
-    return transformer
+        return self.encoder(x=src, mask=src_mask)
+    
+    def decode(self, encoder_output: torch.Tensor, tgt: torch.Tensor, src_mask: torch.Tensor, tgt_mask: torch.Tensor) -> torch.Tensor:
+        return self.decoder(x=tgt, encoder_output=encoder_output, src_mask=src_mask, tgt_mask=tgt_mask)
+    
+    def forward(self, src: torch.Tensor, tgt: torch.Tensor, src_mask: torch.Tensor, tgt_mask: torch.Tensor) -> torch.Tensor:
+        enc_out = self.encoder(x=src, mask=src_mask)
+        dec_out = self.decoder(x=tgt, encoder_output=enc_out, src_mask=src_mask, tgt_mask=tgt_mask)
+        return dec_out

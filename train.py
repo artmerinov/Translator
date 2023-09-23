@@ -8,7 +8,7 @@ from torchmetrics.text import WordErrorRate, CharErrorRate, BLEUScore
 
 from dataset import get_dataset
 from utils import set_random_seed, Config, get_weights_file_path
-from model import build_transformer
+from model import Transformer
 from tokenizer import load_tokenizer
 from selection_strategy import greedy
 
@@ -31,12 +31,16 @@ def train_model(config):
 
     tr_dataloader, va_dataloader = get_dataset(config)
 
-    model = build_transformer(
+    # create the transformer
+    model = Transformer(
+        embed_size=config.D_MODEL,
         src_vocab_size=tokenizer_src.get_vocab_size(),
         tgt_vocab_size=tokenizer_tgt.get_vocab_size(),
-        src_seq_len=config.MAX_LEN,
-        tgt_seq_len=config.MAX_LEN,
-        embed_size=config.D_MODEL,
+        max_len=config.MAX_LEN,
+        dropout=0.1,
+        heads=8,
+        hidden_size=2048,
+        N=6
     ).to(device)
 
     writer = SummaryWriter(config.EXPERIMENT_FOLDER_NAME)
@@ -62,19 +66,16 @@ def train_model(config):
             decoder_mask = tr_batch["decoder_mask"].to(device)  # (batch_size, 1, max_len, max_len)
             label = tr_batch['label'].to(device) # (batch_size, max_len)
 
-            # run the tensors through the encoder, decoder and the projection layer
-            encoder_output = model.encode(src=encoder_input, src_mask=encoder_mask)  # (batch_size, max_len, embed_size)
-            decoder_output = model.decode(
-                encoder_output=encoder_output, 
+            model_output = model(
+                src=encoder_input, 
+                tgt=decoder_input,
                 src_mask=encoder_mask, 
-                tgt=decoder_input, 
                 tgt_mask=decoder_mask
-            )  # (batch_size, max_len, embed_size)
-            proj_output = model.project(x=decoder_output)  # (batch_size, max_len, vocab_size)
+            )
 
             # compute the loss using a simple cross entropy
             loss = loss_fn(
-                input=proj_output.view(-1, tokenizer_tgt.get_vocab_size()), # (batch_size * max_len, vocab_size)
+                input=model_output.view(-1, tokenizer_tgt.get_vocab_size()), # (batch_size * max_len, vocab_size)
                 target=label.view(-1) # (batch_size * max_len)
             )
             batch_iterator.set_postfix({"loss": f"{loss.item():6.3f}"})

@@ -23,13 +23,16 @@ def greedy(model, source, source_mask, tokenizer_src, max_len, device):
 
         # build mask for target
         decoder_mask = causal_mask(decoder_input.size(1)).type_as(source_mask).to(device)
-
-        # calculate output
-        out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
+        
+        out = model.decode(
+            tgt=decoder_input, 
+            encoder_output=encoder_output, 
+            src_mask=source_mask, 
+            tgt_mask=decoder_mask
+        )
 
         # get next token
-        prob = model.project(out[:, -1])
-        _, next_word = torch.max(prob, dim=1)
+        _, next_word = torch.max(out[:, -1], dim=1)
         decoder_input = torch.cat([
             decoder_input, 
             torch.empty(1, 1).type_as(source).fill_(next_word.item()).to(device)
