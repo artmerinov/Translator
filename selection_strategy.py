@@ -42,4 +42,14 @@ def greedy(model, src, src_mask, src_tokenizer, max_len, device):
 
 
 def beam_search():
+    """
+    Beam search.
+    """
+    raise NotImplementedError("This function has not been implemented yet.")
+
+
+def nucleus_sampling():
+    """
+    # Top P.
+    """
     raise NotImplementedError("This function has not been implemented yet.")
