@@ -376,3 +376,5 @@ class Transformer(nn.Module):
         enc_out = self.encode(src=src, src_mask=src_mask)
         dec_out = self.decode(tgt=tgt, encoder_output=enc_out, src_mask=src_mask, tgt_mask=tgt_mask)
         return dec_out
+    
+    
