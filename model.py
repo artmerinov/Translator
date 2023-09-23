@@ -214,44 +214,20 @@ class EncoderBlock(nn.Module):
 
 class Encoder(nn.Module):
     """
-    Encoder:
-        InputEmbedding
-        PositionalEncoding
-        EncoderBlock N times
-        LayerNormalisation
+    Repeats encoder block N times.
     """
-    def __init__(
-            self, 
-            embed_size: int, 
-            vocab_size: int,
-            max_len: int,
-            dropout: float,
-            heads: int,
-            hidden_size: int,
-            N: int,
-    ) -> None:
+    def __init__(self, embed_size: int, dropout: float, heads: int, hidden_size: int, N: int) -> None:
         super().__init__()
-        self.input_embedding = InputEmbedding(
-            embed_size=embed_size, 
-            vocab_size=vocab_size
-        )
-        self.pos_encoding = PositionalEncoding(
-            embed_size=embed_size, 
-            max_len=max_len,
-            dropout=dropout
-        )
         self.encoder_block = EncoderBlock(
             embed_size=embed_size,
             heads=heads,
             hidden_size=hidden_size,
             dropout=dropout
         )
-        self.norm = LayerNormalisation(embed_size=embed_size)
         self.layers = nn.ModuleList(modules=[self.encoder_block for _ in range(N)])
+        self.norm = LayerNormalisation(embed_size=embed_size)
 
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        x = self.input_embedding(x=x)
-        x = self.pos_encoding(x=x)
         for layer in self.layers:
             x = layer(x=x, src_mask=mask)
         x = self.norm(x)
@@ -302,56 +278,23 @@ class DecoderBlock(nn.Module):
 
 class Decoder(nn.Module):
     """
-    Decoder:
-        InputEmbedding
-        PositionalEncoding
-        DecoderBlock N times
-        LayerNormalisation
-        ProjectionLayer
+    Repeats decoder block N times.
     """
-    def __init__(
-            self, 
-            embed_size: int, 
-            vocab_size: int,
-            max_len: int,
-            dropout: float,
-            heads: int,
-            hidden_size: int,
-            N: int,
-    ) -> None:
+    def __init__(self, embed_size: int, dropout: float, heads: int, hidden_size: int, N: int) -> None:
         super().__init__()
-        self.input_embedding = InputEmbedding(
-            embed_size=embed_size, 
-            vocab_size=vocab_size
-        )
-        self.pos_encoding = PositionalEncoding(
-            embed_size=embed_size, 
-            max_len=max_len,
-            dropout=dropout
-        )
         self.decoder_block = DecoderBlock(
             embed_size=embed_size,
             heads=heads,
             hidden_size=hidden_size,
             dropout=dropout
         )
-        self.norm = LayerNormalisation(embed_size=embed_size)
         self.layers = nn.ModuleList(modules=[self.decoder_block for _ in range(N)])
-        self.proj = ProjectionLayer(embed_size=embed_size, vocab_size=vocab_size)
+        self.norm = LayerNormalisation(embed_size=embed_size)
 
-    def forward(
-            self, 
-            x: torch.Tensor, 
-            encoder_output: torch.Tensor, 
-            src_mask: torch.Tensor, 
-            tgt_mask: torch.Tensor
-    ) -> torch.Tensor:
-        x = self.input_embedding(x=x)
-        x = self.pos_encoding(x=x)
+    def forward(self, x: torch.Tensor, encoder_output: torch.Tensor, src_mask: torch.Tensor, tgt_mask: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:
             x = layer(x=x, encoder_output=encoder_output, src_mask=src_mask, tgt_mask=tgt_mask)
         x = self.norm(x)
-        x = self.proj(x)
         return x
 
 
@@ -371,10 +314,22 @@ class Transformer(nn.Module):
             N: int,
     ) -> None:
         super().__init__()
+
+        self.src_input_embedding = InputEmbedding(
+            embed_size=embed_size, 
+            vocab_size=src_vocab_size
+        )
+        self.tgt_input_embedding = InputEmbedding(
+            embed_size=embed_size, 
+            vocab_size=tgt_vocab_size
+        )
+        self.pos_encoding = PositionalEncoding(
+            embed_size=embed_size, 
+            max_len=max_len,
+            dropout=dropout
+        )
         self.encoder = Encoder(
             embed_size=embed_size,
-            vocab_size=src_vocab_size,
-            max_len=max_len,
             dropout=dropout,
             heads=heads,
             hidden_size=hidden_size,
@@ -382,12 +337,14 @@ class Transformer(nn.Module):
         )
         self.decoder = Decoder(
             embed_size=embed_size,
-            vocab_size=tgt_vocab_size,
-            max_len=max_len,
             dropout=dropout,
             heads=heads,
             hidden_size=hidden_size,
             N=N
+        )
+        self.proj = ProjectionLayer(
+            embed_size=embed_size, 
+            vocab_size=tgt_vocab_size
         )
 
         self._reset_parameters()
@@ -401,12 +358,21 @@ class Transformer(nn.Module):
                 nn.init.xavier_uniform_(p)
 
     def encode(self, src: torch.Tensor, src_mask: torch.Tensor) -> torch.Tensor:
-        return self.encoder(x=src, mask=src_mask)
+        x = src
+        x = self.src_input_embedding(x=x)
+        x = self.pos_encoding(x=x)
+        x = self.encoder(x=x, mask=src_mask)
+        return x
     
-    def decode(self, encoder_output: torch.Tensor, tgt: torch.Tensor, src_mask: torch.Tensor, tgt_mask: torch.Tensor) -> torch.Tensor:
-        return self.decoder(x=tgt, encoder_output=encoder_output, src_mask=src_mask, tgt_mask=tgt_mask)
+    def decode(self, tgt: torch.Tensor, encoder_output: torch.Tensor, src_mask: torch.Tensor, tgt_mask: torch.Tensor) -> torch.Tensor:
+        x = tgt
+        x = self.tgt_input_embedding(x=x)
+        x = self.pos_encoding(x=x)
+        x = self.decoder(x=x, encoder_output=encoder_output, src_mask=src_mask, tgt_mask=tgt_mask)
+        x = self.proj(x=x)
+        return x
     
     def forward(self, src: torch.Tensor, tgt: torch.Tensor, src_mask: torch.Tensor, tgt_mask: torch.Tensor) -> torch.Tensor:
-        enc_out = self.encoder(x=src, mask=src_mask)
-        dec_out = self.decoder(x=tgt, encoder_output=enc_out, src_mask=src_mask, tgt_mask=tgt_mask)
+        enc_out = self.encode(src=src, src_mask=src_mask)
+        dec_out = self.decode(tgt=tgt, encoder_output=enc_out, src_mask=src_mask, tgt_mask=tgt_mask)
         return dec_out
