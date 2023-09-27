@@ -327,37 +327,12 @@ class Transformer(nn.Module):
     ) -> None:
         super().__init__()
 
-        self.src_input_embedding = InputEmbedding(
-            embed_size=embed_size, 
-            vocab_size=src_vocab_size
-        )
-        self.tgt_input_embedding = InputEmbedding(
-            embed_size=embed_size, 
-            vocab_size=tgt_vocab_size
-        )
-        self.pos_encoding = PositionalEncoding(
-            embed_size=embed_size, 
-            max_len=max_len,
-            dropout=dropout
-        )
-        self.encoder = Encoder(
-            embed_size=embed_size,
-            dropout=dropout,
-            heads=heads,
-            hidden_size=hidden_size,
-            N=N
-        )
-        self.decoder = Decoder(
-            embed_size=embed_size,
-            dropout=dropout,
-            heads=heads,
-            hidden_size=hidden_size,
-            N=N
-        )
-        self.proj = ProjectionLayer(
-            embed_size=embed_size, 
-            vocab_size=tgt_vocab_size
-        )
+        self.src_input_embedding = InputEmbedding(embed_size=embed_size, vocab_size=src_vocab_size)
+        self.tgt_input_embedding = InputEmbedding(embed_size=embed_size, vocab_size=tgt_vocab_size)
+        self.pos_encoding = PositionalEncoding(embed_size=embed_size, max_len=max_len, dropout=dropout)
+        self.encoder = Encoder(embed_size=embed_size, dropout=dropout, heads=heads, hidden_size=hidden_size, N=N)
+        self.decoder = Decoder(embed_size=embed_size, dropout=dropout, heads=heads, hidden_size=hidden_size, N=N)
+        self.proj = ProjectionLayer(embed_size=embed_size, vocab_size=tgt_vocab_size)
 
         self.init_weights()
 

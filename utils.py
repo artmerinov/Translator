@@ -24,6 +24,6 @@ def get_last_checkpoint_path(config):
     """
     Loads last model weights.
     """
-    weights_files = os.listdir(config.MODEL_FOLDER_NAME)
+    weights_files = os.listdir(config.PATH_TO_MODEL_WEIGHTS)
     weights_files.sort()
-    return os.path.join(config.MODEL_FOLDER_NAME, str(weights_files[-1]))
+    return os.path.join(config.PATH_TO_MODEL_WEIGHTS, str(weights_files[-1]))

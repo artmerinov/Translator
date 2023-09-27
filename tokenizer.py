@@ -12,12 +12,11 @@ def create_tokenizer(dataset, config, lang: str):
     """
     # path to the tokenizer folder
     # make sure the tokenizer folder exists
-    tokenizer_dir = config.TOKENIZER_FOLDER_NAME
-    if not os.path.exists(tokenizer_dir):
-        os.mkdir(tokenizer_dir)
+    if not os.path.exists(config.PATH_TO_TOKENIZERS):
+        os.mkdir(config.PATH_TO_TOKENIZERS)
 
     # path to the tokenizer file
-    tokenizer_path = os.path.join(config.TOKENIZER_FOLDER_NAME, f'tokenizer_{lang}.json')
+    tokenizer_path = os.path.join(config.PATH_TO_TOKENIZERS, f'tokenizer_{lang}.json')
     if not os.path.exists(tokenizer_path):
         # if tokenizer file doesn't exist, we create tokenizer from scratch
         tokenizer = Tokenizer(WordLevel(unk_token="[UNK]"))
@@ -40,7 +39,7 @@ def load_tokenizer(config, lang):
     """
     Load tokenizer from file.
     """
-    tokenizer_path = os.path.join(config.TOKENIZER_FOLDER_NAME, f'tokenizer_{lang}.json')
+    tokenizer_path = os.path.join(config.PATH_TO_TOKENIZERS, f'tokenizer_{lang}.json')
     if os.path.exists(tokenizer_path):
         tokenizer = Tokenizer.from_file(str(tokenizer_path))
     else:

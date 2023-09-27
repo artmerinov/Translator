@@ -7,7 +7,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchmetrics.text import WordErrorRate, CharErrorRate, BLEUScore
 
 from dataset import get_dataset
-from utils import set_random_seed, Config, get_weights_file_path
+from utils import set_random_seed, Config
 from model import Transformer
 from tokenizer import load_tokenizer
 from selection_strategy import greedy
@@ -17,13 +17,9 @@ def train_model(config):
     """
     Training process.
     """
-    # set up device
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
     # make sure the weights folder exists
-    weights_dir = config.MODEL_FOLDER_NAME
-    if not os.path.exists(weights_dir):
-        os.mkdir(weights_dir)
+    if not os.path.exists(config.PATH_TO_MODEL_WEIGHTS):
+        os.mkdir(config.PATH_TO_MODEL_WEIGHTS)
 
     # load tokenizers
     src_tokenizer = load_tokenizer(config=config, lang=config.LANG_SRC)
@@ -31,20 +27,21 @@ def train_model(config):
 
     tr_dataloader, va_dataloader = get_dataset(config)
 
-    # create the transformer
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
     model = Transformer(
-        embed_size=config.D_MODEL,
-        src_vocab_size=src_tokenizer.get_vocab_size(),
-        tgt_vocab_size=tgt_tokenizer.get_vocab_size(),
-        max_len=config.MAX_LEN,
-        dropout=0.1,
-        heads=8,
-        hidden_size=2048,
-        N=6
+        src_vocab_size = src_tokenizer.get_vocab_size(),
+        tgt_vocab_size = tgt_tokenizer.get_vocab_size(),
+        embed_size     = config.EMBED_SIZE,
+        hidden_size    = config.HIDDEN_SIZE,
+        max_len        = config.MAX_LEN,
+        dropout        = config.DROPOUT,
+        heads          = config.HEADS,
+        N              = config.LAYERS,
     ).to(device)
 
-    writer = SummaryWriter(config.EXPERIMENT_FOLDER_NAME)
-    optimizer = torch.optim.Adam(params=model.parameters(), lr=config.LR, eps=1e-9)
+    writer = SummaryWriter(config.PATH_TO_EXPERIMENTS)
+    optimizer = torch.optim.Adam(params=model.parameters(), lr=1e-5, eps=1e-9)
     loss_fn = nn.CrossEntropyLoss(ignore_index=src_tokenizer.token_to_id("[PAD]"), label_smoothing=0.1).to(device)
 
     batch_processed = 0
@@ -104,10 +101,10 @@ def train_model(config):
         wer = WordErrorRate()
         cer = CharErrorRate()
 
-        acc = 0
+        batches_processed = 0
         with torch.no_grad():
             for va_batch in va_dataloader:
-                acc += 1
+                acbatches_processedc += 1
 
                 encoder_input = va_batch["encoder_input"].to(device) # (b, seq_len)
                 encoder_mask = va_batch["encoder_mask"].to(device) # (b, 1, 1, seq_len)
@@ -130,32 +127,29 @@ def train_model(config):
                 acc_cer += cer(prd_text, tgt_text)
                 acc_wer += wer(prd_text, tgt_text)
 
-                if acc % 10 == 0:
+                if batches_processed % 10 == 0:
                     print(f"{f'SRC: ':>12}{src_text}")
                     print(f"{f'TGT: ':>12}{tgt_text}")
                     print(f"{f'PRD: ':>12}{prd_text}")
                     print('-'*80)
 
-                if acc == 100:
+                if batches_processed == 100:
                     # will calculate va scores based on first 100 batches 
                     # (in our case 1 batch = 1 sentence)
                     break
 
-        writer.add_scalar('validation CER', (acc_cer / acc).item(), epoch)
-        writer.add_scalar('validation WER', (acc_wer / acc).item(), epoch)
-        writer.add_scalar('validation BLEU', (acc_bleu / acc).item(), epoch)
+        writer.add_scalar('validation CER', (acc_cer / batches_processed).item(), epoch)
+        writer.add_scalar('validation WER', (acc_wer / batches_processed).item(), epoch)
+        writer.add_scalar('validation BLEU', (acc_bleu / batches_processed).item(), epoch)
         writer.flush()
         writer.close()
 
-        print(f'CER: {(acc_cer / acc).item():.4f}')
-        print(f'WER: {(acc_wer / acc).item():.4f}')
-        print(f'BLEU: {(acc_bleu / acc).item():.4f}')
+        print(f'CER: {(acc_cer / batches_processed).item():.4f}')
+        print(f'WER: {(acc_wer / batches_processed).item():.4f}')
+        print(f'BLEU: {(acc_bleu / batches_processed).item():.4f}')
 
         # save the model at the end of every epoch
-        model_filename = os.path.join(config.MODEL_FOLDER_NAME, f'epoch_{epoch:02d}.pt')
-        if not os.path.exists(config.MODEL_FOLDER_NAME):
-            os.mkdir(config.MODEL_FOLDER_NAME)
-
+        model_filename = os.path.join(config.PATH_TO_MODEL_WEIGHTS, f'epoch_{epoch:02d}.pt')
         torch.save({
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
