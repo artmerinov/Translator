@@ -1,18 +1,19 @@
-# Byte-compiled / optimized / DLL files
+# byte-compiled
 __pycache__/
 
-# Jupyter Notebook
+# jupyter notebook
 .ipynb_checkpoints
 
-# Environments
+# environments
 env/
 venv/
-transformer_traslator/
+.venv/
 
-# Saved files
-runs/
-tokenizers/
+# data and model artifacts
+data/
 weights/
+tokenizers/
+runs/
 
 # OS generated files
 .DS_Store

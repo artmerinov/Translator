@@ -152,7 +152,10 @@ def train_model(config):
         print(f'BLEU: {(acc_bleu / acc).item():.4f}')
 
         # save the model at the end of every epoch
-        model_filename = get_weights_file_path(config, f"{epoch:02d}")
+        model_filename = os.path.join(config.MODEL_FOLDER_NAME, f'epoch_{epoch:02d}.pt')
+        if not os.path.exists(config.MODEL_FOLDER_NAME):
+            os.mkdir(config.MODEL_FOLDER_NAME)
+
         torch.save({
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
