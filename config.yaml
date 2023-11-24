@@ -2,6 +2,7 @@ datasource: opus_books
 lang_src: ru
 lang_tgt: it
 
+path_to_texts: texts
 path_to_model_weights: weights
 path_to_experiments: runs
 path_to_tokenizers: tokenizers

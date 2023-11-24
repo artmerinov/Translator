@@ -48,6 +48,13 @@ def beam_search():
     raise NotImplementedError("This function has not been implemented yet.")
 
 
+def mcts():
+    """
+    Monte-Carlo Tree Search.
+    """
+    raise NotImplementedError("This function has not been implemented yet.")
+
+
 def nucleus_sampling():
     """
     # Top P.

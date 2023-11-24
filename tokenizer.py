@@ -32,6 +32,9 @@ def create_tokenizer(dataset, config, lang: str):
 
 
 def craete_bpe_tokenzer():
+    """
+    Create BPE (Byte-Pair Encoding) tokenizer.
+    """
     raise NotImplementedError("This function has not been implemented yet.")
 
 
